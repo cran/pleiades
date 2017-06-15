@@ -16,6 +16,7 @@
 #' There is a function \code{\link{pl_cache}}, used to download the raw
 #' csv files. That function is run internally in these functions if you have
 #' not run it before, or if only some fo the files are present.
+#' @note Requires \code{RSQLite} package
 #' @examples \dontrun{
 #' pl_search()
 #' pl_search_loc()
@@ -34,9 +35,13 @@
 #' }
 
 pl_search <- function(query = NULL, ...) {
+  check4sqlite()
   pl_cache()
 
-  if (!check_for_sql(pl_cache_path(), 'all')) {
+  if (
+    !check_for_sql(pl_cache_path(), 'all') ||
+    file_is_empty(pl_cache_path(), 'all')
+  ) {
     loc <- read_csv(pl_cache_path(), 'locations')
     nam <- read_csv(pl_cache_path(), 'names')
     pla <- read_csv(pl_cache_path(), 'places')
@@ -112,20 +117,17 @@ check_for_sql <- function(path, which="locations"){
   file.exists(file.path(path, sprintf("pleiades_%s.sqlite3", which)))
 }
 
+file_is_empty <- function(path, which="locations") {
+  ff <- file.info(file.path(path, sprintf("pleiades_%s.sqlite3", which)))
+  !ff$size > 0
+}
+
 make_sql_conn <- function(path, which="locations"){
   sqldb <- file.path(path, sprintf("pleiades_%s.sqlite3", which))
-  dplyr::src_sqlite(path = sqldb, create = TRUE)
+  con <- DBI::dbConnect(RSQLite::SQLite(), dbname = sqldb)
+  dbplyr::src_dbi(con)
 }
 
 write_sql_table <- function(con, name, table){
   dplyr::copy_to(con, table, name, temporary = FALSE, indexes = list("created"))
 }
-
-# dbWriteTable(con, "locations", dat, row.names = FALSE)
-# dbListTables(con)
-# dbListFields(con, "locations")
-#
-# my_db <- src_sqlite(path = sqldb, create = TRUE)
-# locations <- copy_to(my_db, dat, which, temporary = FALSE, indexes = list("created"))
-# locdf <- tbl(my_db, "locations")
-# tbl(my_db, sql("SELECT * FROM locations limit 5"))
